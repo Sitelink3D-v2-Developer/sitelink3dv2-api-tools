@@ -10,9 +10,13 @@ The AsBuilt Live Cesium Map Viewer has two purposes:
 ## Usage
 The following process describes the use of the viewer:
 
+- Enable CORS.
 - Configure the HTML.
 - Configure the site details.
 - Select the desired AsBuilt parameters.
+
+### Enable CORS
+Cross Origin Resource Sharing (CORS) must be enabled in your browswer in order to use this tool. Most browers disable CORS by default. A browser plugin can be used to enable CORS. See [here](https://mybrowseraddon.com/access-control-allow-origin.html) for more information.
 
 ### Configure the HTML
 In order to use this tool, a free Cesium Ion token is required. This can be obtained from https://cesium.com/ion/tokens. The token needs to be assigned to the ```Cesium.Ion.defaultAccessToken``` variable in the ```CesiumAsBuilt.html```. The HTML file can then be opened in a browser. The absence of a globe in the Cesium window is symptomatic of a missing or invalid Ion token.
