@@ -16,7 +16,7 @@
   .container {
     display: grid;
     grid-template-columns: 100%;
-    grid-template-rows: 5px auto 20px 150px;
+    grid-template-rows: 5px auto 20px 180px;
     height: 100vh;
   }
 
@@ -43,7 +43,7 @@
 
   .firstCol label {
     padding-top: 5px;
-    width: 80px;
+    width: 120px;
   }
 
   .secondCol label {
@@ -53,17 +53,23 @@
 
   .editItem {
     display: flex;
+    align-items: stretch;
     height:30px;
     padding-bottom: 5px;
   }
 
   .editItem input[type=text] {
-    width: 98%;
-    margin-left: 4px;
+    flex-grow: 2;
   }
 
   .editItem input[type="checkbox"] {
     margin-top: 5px;
+  }
+
+  select {
+    height: 30px;
+    line-height: 30px;
+    width: 170px;
   }
 
   .colorLegend {
@@ -102,6 +108,22 @@
     width: 80px;
     height: 30px;
   }
+
+  .input-group {
+    display: inline-flex;
+  }
+
+  .input-group-addon {
+    padding: 4px 6px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1;
+    color: #4d4d4d;
+    text-align: center;
+    background-color: #ccc;
+    border: 1px solid #ccc;
+    border-radius: 0;
+  }
 </style>
 <body>
   <div class="container">
@@ -111,20 +133,20 @@
     // Your access token can be found at: https://cesium.com/ion/tokens.
     Cesium.Ion.defaultAccessToken = '';
 
-    var viewer = new Cesium.Viewer("cesiumContainer", {
+    const viewer = new Cesium.Viewer("cesiumContainer", {
       shouldAnimate: true,
       imageryProvider : Cesium.createWorldImagery({
         style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS
       }),
     });
 
-    var now = new Date();
+    let now = new Date();
     const start = now.toISOString();
     now.setMonth(now.getMonth() + 1);
     const end = now.toISOString();
 
     // refresh every 15s
-    var times = Cesium.TimeIntervalCollection.fromIso8601({
+    const times = Cesium.TimeIntervalCollection.fromIso8601({
       iso8601: `${start}/${end}/PT15S`,
       leadingInterval: true,
       trailingInterval: true,
@@ -143,6 +165,13 @@
         </select>
       </div>
       <div class="editItem">
+        <label>Data Center:</label>
+        <select id="dc">
+          <option value="us">USA</option>
+          <option value="eu">Europe</option>
+        </select>
+      </div>
+      <div class="editItem">
         <label>Site ID: </label>
         <input id="site_id" type="text"></input>
       </div>
@@ -153,26 +182,37 @@
     </div>
     <div class="secondCol">
       <div class="editItem">
-        <label>Tasks:</label>
+        <label>Task:</label>
         <select id="tasks"></select>
       </div>
       <div class="editItem">
-        <label>sequences:</label>
-        <select id="sequences"></select>
-      </div>
-      <div class="editItem">
-        <label>AsBuilt:</label>
-        <select id="asbuilt_func">
-            <option value="none">None</option>
-            <option value="passCount">PassCount</option>
-            <option value="cutFill">Cut/Fill</option>
-            <option value="stiffness">Stiffness</option>
-            <option value="temperature">Temperature</option>
+        <label>sequence:</label>
+        <select id="sequences">
+          <option value="none">None</option>
         </select>
       </div>
       <div class="editItem">
-        <label>Show Legend:</label>
-        <input id="show_legend" type="checkbox" value="showLegend" checked></input>
+        <div class="input-group">
+          <label>AsBuilt:</label>
+          <select id="asbuilt_func">
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Show Legend:</label>
+          <input id="show_legend" type="checkbox" value="showLegend" checked></input>
+        </div>
+      </div>
+      <div class="editItem" id="reference_surface" style="display:none">
+        <div class="input-group">
+          <label>Ref Surface:</label>
+          <select id="design_surfaces"></select>
+        </div>
+        <div class="input-group">
+          <label>Ref Offset:</label>
+          <input id="design_offset" type="number" placeholder="0" step="1" value="0"></input>
+          <span class="input-group-addon" id="length_abbrev">m</span>
+        </div>
       </div>
       <div class="colorLegend">
         <div class="legend" id="color_legend"></div>
@@ -183,12 +223,14 @@
     </div>
   </div>
   <script>
-    const _baseURLs = {
-      QA: 'https://us-qa-api.sitelink.topcon.com',
-      PROD: 'https://us-api.sitelink.topcon.com',
+    const BASE_URLs = {
+      QA: 'https://qa-api.sitelink.topcon.com',
+      PROD: 'https://api.sitelink.topcon.com',
     }
 
-    const _systemUnits = {
+    const DESIGN_SURFACE_PREFIX = 'strategy:unique_by_design_type_by_name:design_type:Surfaces:name:';
+
+    const SYSTEM_UNITS = {
       length: {
         millimetres: { abbreviation: 'mm', ratio: 0.001 },
         centimetres: { abbreviation: 'cm', ratio: 0.01 },
@@ -213,8 +255,12 @@
       },
     }
 
+    function getSiteApiUrl() {
+      return BASE_URLs[$("#env").val()].replace('://', `://${$("#dc").val()}-`);
+    }
+
     function convertUnit(type, value, toUnit) {
-      const unit = _systemUnits[type][toUnit.unit]
+      const unit = SYSTEM_UNITS[type][toUnit.unit]
       if (unit.ratio) {
         return value/unit.ratio;
       } else {
@@ -222,31 +268,100 @@
       }
     }
 
-    function convertTemperature(value, unitType) {
-      const unit = _lengthUnits[unitType]
-      return value/unit.ratio;
+    function convertUnitToBase(type, value, fromUnit) {
+      const unit = SYSTEM_UNITS[type][fromUnit.unit]
+      if (unit.ratio) {
+        return value*unit.ratio;
+      } else {
+        return unit.conversion.toBase(value)
+      }
     }
 
     function b64Raw(value) {
       return window.btoa(value).replace(/={1,2}$/, '');
     }
 
+    function getTileSize(tileConfig) {
+      const cellTemplate = tileConfig.cellTemplate;
+      return parseInt(tileConfig[cellTemplate] || "512", 10);
+    };
+
+    function makeDesignLayerSpec(designFileUUID, offset, tileResolution) {
+      return {
+        cellTemplateId: 'default',
+        tileResolution,
+        initialConditions: {
+          surface: `urn:X-topcon:designfile:${designFileUUID}`,
+          offset,
+        },
+      };
+    }
+
+    const ASBUILT_FUNC = {
+      passCount: { name: 'Passcount', fixedFunc: 'pass', dataType: 'uint16'},
+      cutFill: { name: 'Cut/Fill', fixedFunc: 'hght', dataType: 'real32'},
+      stiffness: { name: 'Stiffness', fixedFunc: 'dsty', dataType: 'uint16'},
+      temperature: { name: 'Temperature', fixedFunc: 'temp', dataType: 'uint16'},
+    }
+
     // asbuilt func templates
-    const _asBuiltFuncTemplates = {
-      passCount: '{"alpha":true,"expr":{"type":"colorize32","color_key":"00000000","clamp":true,"sample":"last","color_map":{colormap},"expr":{"type":"asbuilt","function":"pass","component_type":"uint16"}}}',
-      cutFill: '{"alpha":true,"expr":{"type":"colorize32","color_key":"00000000","clamp":true,"sample":"last","color_map":{colormap},"expr":{"type":"asbuilt","function":"hght","component_type":"real32"}}}',
-      stiffness: '{"alpha":true,"expr":{"type":"colorize32","color_key":"00000000","clamp":true,"sample":"last","color_map":{colormap},"expr":{"type":"asbuilt","function":"dsty","component_type":"uint16"}}}',
-      temperature: '{"alpha":true,"expr":{"type":"colorize32","color_key":"00000000","clamp":true,"sample":"last","color_map":{colormap},"expr":{"type":"asbuilt","function":"temp","component_type":"uint16"}}}',
+    function getAsbuiltFnTemplate(func, colormap) {
+      switch (func) {
+      case 'passCount':
+      case 'stiffness':
+      case 'temperature':
+        return {
+          alpha: true,
+          expr: {
+            type: 'colorize32',
+            color_key: '00000000',
+            clamp: true,
+            sample: 'last',
+            color_map: colormap,
+            expr: {
+              type: 'asbuilt',
+              function: ASBUILT_FUNC[func].fixedFunc,
+              component_type: ASBUILT_FUNC[func].dataType
+            }
+          }
+        };
+      case 'cutFill':
+        return {
+          alpha: true,
+          expr: {
+            type: 'colorize32',
+            color_key: '00000000',
+            clamp: true,
+            sample: 'last',
+            color_map: colormap,
+            expr: {
+              type: 'arithmetic',
+              operator: 'subtract',
+              expr1: {
+                type: 'asbuilt',
+                function: 'hght',
+                component_type: 'real32'
+              },
+              expr2: {
+                type: 'design',
+                function: 'hght',
+                component_type: 'real32'
+              }
+            }
+          }
+        };
+      default:
+        return {};
+      }
     }
 
     function getAsbuiltFn(func, colormap) {
       const colors = colormap.colors;
-      var color_map = []
+      const color_map = []
       switch (func) {
         case 'passCount': {
-          colors.forEach(function(color, index) {
-            if (index ==0) return;
-            color_map.push({key: index, color: `${color.substring(1)}FF`});
+          colors.slice(1).forEach(function(color, index) {
+            color_map.push({key: index+1, color: `${color.substring(1)}FF`});
           });
           break;
         }
@@ -257,7 +372,7 @@
           const itemLength = colormap.colors.length;
           const middle = Math.round((itemLength - 1) / 2);
           colors.slice().reverse().forEach(function(color, index) {
-            var keyValue = index < middle ? parseFloat((offset - interval*(middle-index-0.5)).toFixed(3)) : parseFloat((offset + interval*(index-middle+0.5)).toFixed(3));
+            const keyValue = offset + (index - 0.5 * itemLength) * interval;
             color_map.push({key: keyValue, color: `${color.substring(1)}FF`});
           });
           break;
@@ -286,45 +401,80 @@
           break;
         }
       }
-      const strColorMap = JSON.stringify(color_map);
-      const strFn = _asBuiltFuncTemplates[func].replace('{colormap}', strColorMap);
-      return window.btoa(strFn);
+      const strFn = JSON.stringify(getAsbuiltFnTemplate(func, color_map));
+      return b64Raw(strFn);
     }
 
-    var cesiumFullScreen = false;
-    var siteInfo = {};
-    var transform = {};
-    var tasks = {};
-    var sequencesByTask = {};
-    var sequenceTypes = {};
-    var colorMaps = {};
-    var colorMapID;
-    var imageryAsBuilt;
+    function getAvailableAsBuiltFns(cellTemplate) {
+      switch (cellTemplate) {
+        case 'compactor':
+        case 'paving':
+          return ['passCount', 'cutFill', 'stiffness', 'temperature'];
+        case 'default':
+        case 'bulkEarthWorks':
+          return ['passCount', 'cutFill'];
+        default:
+          return [];
+      }
+    }
+
+    // global data
+    let _cesiumFullScreen = false;
+    let _siteInfo = {};
+    let _transform = {};
+    let _tasks = {};
+    let _sequencesByTask = {};
+    let _sequenceTypes = {};
+    let _colorMaps = {};
+    let _tileConfig = {};
+    let _designSets = {};
+    let _sequenceType;
+    let _colorMapID;
+    let _imageryAsBuilt;
+    let _zoomToSite = false;
+
+    function resetSiteData() {
+      _siteInfo = {};
+      _transform = {};
+      _tasks = {};
+      _sequencesByTask = {};
+      _sequenceTypes = {};
+      _colorMaps = {};
+      _tileConfig = {};
+      _designSets = {};
+      _sequenceType = null;
+      _colorMapID = null;
+    }
 
     document.addEventListener(Cesium.Fullscreen.changeEventName, () => {
-      cesiumFullScreen = !cesiumFullScreen;
-      if (cesiumFullScreen) {
+      _cesiumFullScreen = !_cesiumFullScreen;
+      if (_cesiumFullScreen) {
         $("#settings").hide();
       } else {
         $("#settings").show();
       }
     });
 
-    $("#view").click(function(){
-      if (!siteInfo.value) return;
-      createLayer();
+    $("#view").click(function() {
+      viewAsBuilt();
     });
 
     $("#env").change(function() {
-        loadInfo();
+      loadInfo();
+    });
+
+    $("#dc").change(function() {
+      loadInfo();
     });
 
     $("#site_id").change(function() {
-        loadInfo();
+      _zoomToSite = true;
+      loadInfo();
     });
 
     $("#jwt").change(function() {
-        loadInfo();
+      _zoomToSite = true;
+      loadInfo();
     });
 
     $("#show_legend").change(function() {
@@ -336,25 +486,22 @@
     });
 
     $("#tasks").change(function() {
-      $("#sequences").empty();
-      $("#color_legend").empty();
-      var task = $("#tasks").val()
-      if (task in sequencesByTask) {
-        sequencesByTask[task].forEach(function(sequence) {
-          $("#sequences").append($('<option>', {
-            value: sequence.id,
-            text: sequence.name,
-          }))
-        });
-      }
+      setTask();
+      setDesignSurfaces();
+    })
+
+    $("#sequences").change(function() {
+      setSequenceType();
+      setColorMap(_sequenceType);
     })
 
     $("#asbuilt_func").change(function() {
-      if ($("#asbuilt_func").val() != 'none') {
-        setColorMap();
+      if ($("#asbuilt_func").val() === 'cutFill') {
+        $("#reference_surface").show();
       } else {
-        $("#color_legend").empty();
+        $("#reference_surface").hide();
       }
+      setColorMap(_sequenceType);
     })
 
     function getColorText(asbuiltFunc, i, colormap) {
@@ -363,14 +510,14 @@
             return 'pass ' + i;
         case 'cutFill': {
           const range = colormap.range;
-          const lengthUnit = siteInfo.value.units.length;
+          const lengthUnit = _siteInfo.value.units.length;
           const interval = range.interval;
           const offset = range.offset;
           const convertedInterval = convertUnit('length', interval, lengthUnit)
           const convertedOffset = convertUnit('length', offset, lengthUnit)
           const itemLength = colormap.colors.length;
           const middle = Math.round((itemLength - 1) / 2);
-          const abbrev = _systemUnits['length'][lengthUnit.unit].abbreviation;
+          const abbrev = SYSTEM_UNITS['length'][lengthUnit.unit].abbreviation;
           return i < middle ? `${(convertedOffset + convertedInterval*(middle-i-0.5)).toFixed(3)}${abbrev} .. ${(convertedOffset + convertedInterval*(middle-i+0.5)).toFixed(3)}${abbrev}` :
             `${(convertedOffset - convertedInterval*(i-middle+0.5)).toFixed(3)}${abbrev} .. ${(convertedOffset - convertedInterval*(i-middle-0.5)).toFixed(3)}${abbrev}`
         }
@@ -388,13 +535,13 @@
           return
         }
         case 'temperature': {
-          const tempUnit = siteInfo.value.units.temperature;
+          const tempUnit = _siteInfo.value.units.temperature;
           const range = colormap.range;
           const lower = Math.min(range.lower, range.upper);
           const upper = Math.max(range.lower, range.upper);
 
           const buffer = Math.min(range.buffer, (upper - lower) / 2);
-          const abbrev = _systemUnits['temperature'][tempUnit.unit].abbreviation;
+          const abbrev = SYSTEM_UNITS['temperature'][tempUnit.unit].abbreviation;
           switch (i) {
             case 0: return `&gt; ${upper}${abbrev}`;
             case 1: return `${upper - buffer}${abbrev} .. ${upper}${abbrev}`
@@ -407,57 +554,122 @@
       }
     }
 
-    function setColorMap() {
-        $("#color_legend").empty();
-        colorMapID = '';
-        var task = $("#tasks").val();
-        var sequence = $("#sequences").val();
-        var func = $("#asbuilt_func").val();
-        var sequenceTypeID
-        if (!sequencesByTask[task])
-            return;
-        for (var i =0; i<sequencesByTask[task].length; ++i) {
-            if (sequencesByTask[task][i].id == sequence) {
-                sequenceTypeID = sequencesByTask[task][i].sequenceType;
-                break;
-            }
-        }
-        if (sequenceTypeID) {
-            var sequenceType = sequenceTypes[sequenceTypeID];
-            if (sequenceType) {
-              var defaultColorMaps = sequenceType._extra['sl::sequenceType::asbuilt']['FFP'].defaultColorMaps;
-              var asbuiltFunc = $("#asbuilt_func").val();
-              colorMapID = defaultColorMaps[`${asbuiltFunc}ColorMap`];
-              var colorMap = colorMaps[colorMapID];
-              colorMap.colormap.colors.forEach(function(color, index) {
-                  if (func == 'passCount' && index ==0) return;
-                  var colorText = getColorText(asbuiltFunc, index, colorMap.colormap);
-                  $("#color_legend").append(`<div class="legendItem" style="background:${color}"><span>${colorText}</span></div>`);
-              })
-            }
-        }
+    function setTask() {
+      $("#sequences").empty();
+      $("#color_legend").empty();
+      $("#sequences").append($('<option>', { value: 'none', text: 'None' }));
+      const task = $("#tasks").val();
+      if (task in _sequencesByTask) {
+        _sequencesByTask[task].forEach(function(sequence) {
+          $("#sequences").append($('<option>', {
+            value: sequence.id,
+            text: sequence.name,
+          }))
+        });
+      }
+      $("#sequences").trigger('change');
     }
 
-    function addAsBuiltImages(layerSpecID) {
-      var viewSite = true;
-      if (!!imageryAsBuilt) {
-        viewer.scene.imageryLayers.remove(imageryAsBuilt);
-        viewSite = false;
+    function setSequenceType() {
+      $("#asbuilt_func").empty();
+      $("#asbuilt_func").append($('<option>', { value: 'none', text: 'None' }));
+      $("#asbuilt_func").trigger('change');
+      _sequenceType = null;
+
+      const task = $("#tasks").val();
+      const sequences = _sequencesByTask[task];
+      if (!sequences)
+        return;
+
+      const sequence = $("#sequences").val();
+      let sequenceTypeID;
+      for (let i = 0; i < sequences.length; ++ i) {
+        if (sequences[i].id === sequence) {
+            sequenceTypeID = sequences[i].sequenceType;
+            break;
+        }
+      }
+      if (!sequenceTypeID)
+        return;
+      _sequenceType = _sequenceTypes[sequenceTypeID];
+      if (!_sequenceType)
+        return;
+
+      // add available asbuilt functions according to _sequenceType cellTemplate settings
+      _tileConfig = _sequenceType._extra['sl::sequenceType::asbuilt'].FFP.tileConfig;
+      const availableFns = getAvailableAsBuiltFns(_tileConfig.cellTemplate);
+      availableFns.forEach(function(fn) {
+        $("#asbuilt_func").append($('<option>', {
+          value: fn,
+          text: ASBUILT_FUNC[fn].name,
+        }))
+      });
+      $("#asbuilt_func").trigger('change');
+    }
+
+    function setColorMap(_sequenceType) {
+      $("#color_legend").empty();
+      _colorMapID = null;
+      if (!_sequenceType)
+        return;
+      const asbuiltFunc = $("#asbuilt_func").val();
+      if (!asbuiltFunc || asbuiltFunc == 'none')
+      return;
+
+      const defaultColorMaps = _sequenceType._extra['sl::sequenceType::asbuilt'].FFP.defaultColorMaps;
+      _colorMapID = defaultColorMaps[`${asbuiltFunc}ColorMap`];
+      const colorMap = _colorMaps[_colorMapID];
+      colorMap.colormap.colors.forEach(function(color, index) {
+        if (asbuiltFunc == 'passCount' && index == 0) return;
+        const colorText = getColorText(asbuiltFunc, index, colorMap.colormap);
+        $("#color_legend").append(`<div class="legendItem" style="background:${color}"><span>${colorText}</span></div>`);
+      })
+    }
+
+    function setDesignSurfaces() {
+      $("#design_surfaces").empty();
+      const task = _tasks[$("#tasks").val()];
+      if (task && task.design) {
+        task.design.designObjectSets.forEach(function(designObjectSetID) {
+          _designSets[designObjectSetID].designObjects.forEach(function(designObject) {
+            if (designObject.startsWith(DESIGN_SURFACE_PREFIX)) {
+              $("#design_surfaces").append($('<option>', {
+                value: designObject,
+                text: designObject.substring(DESIGN_SURFACE_PREFIX.length),
+              }));
+            }
+          });
+        });
+      }
+    }
+
+    function addAsBuiltImages(designLayerSpecID, layerSpecID) {
+      if (!!_imageryAsBuilt) {
+        viewer.scene.imageryLayers.remove(_imageryAsBuilt);
       }
 
-      var asbuiltFunc = $('#asbuilt_func').val();
-      var colorMap = colorMaps[colorMapID];
-      var fn = getAsbuiltFn(asbuiltFunc, colorMap.colormap);
+      const asbuiltFunc = $('#asbuilt_func').val();
+      const colorMap = _colorMaps[_colorMapID];
+      const fn = getAsbuiltFn(asbuiltFunc, colorMap.colormap);
 
-      var baseUrl = _baseURLs[$("#env").val()];
-      var siteID = $("#site_id").val();
-      var jwt = $("#jwt").val();
-      var transformRev = transform._rev;
+      const baseUrl = getSiteApiUrl();
+      const siteID = $("#site_id").val();
+      const jwt = $("#jwt").val();
+      const transformRev = _transform._rev;
 
-      var url = `${baseUrl}/asbuilt_live/unstable/tiles/1.0.0/sites/${siteID}/layers/${layerSpecID}/{TileMatrix}/{TileCol}/{TileRow}.png?reverse_lat=true&transform=${transformRev}&fn=${fn}`
-      var provider = new Cesium.WebMapTileServiceImageryProvider({
+      const url = `${baseUrl}/asbuilt_live/unstable/tiles/1.0.0/sites/${siteID}/layers/${layerSpecID}/{TileMatrix}/{TileCol}/{TileRow}.png`
+      const query = {
+        reverse_lat: 'true',
+        fn: fn,
+        transform: transformRev,
+      };
+      if (designLayerSpecID != '') {
+        query.design = designLayerSpecID;
+      }
+      const provider = new Cesium.WebMapTileServiceImageryProvider({
         url: new Cesium.Resource({
           url: url,
+          queryParameters: query,
           headers: {'X-Topcon-Auth': jwt},
         }),
         tileWidth: 512,
@@ -472,15 +684,15 @@
         credit: "Topcon AsBuit Data",
       });
 
-      imageryAsBuilt = new Cesium.ImageryLayer(provider, {});
-      viewer.scene.imageryLayers.add(imageryAsBuilt);
+      _imageryAsBuilt = new Cesium.ImageryLayer(provider, {});
+      viewer.scene.imageryLayers.add(_imageryAsBuilt);
 
       provider.readyPromise.then(function () {
-        var start = new Cesium.JulianDate();
-        var stop = new Cesium.JulianDate().addDays(100);
+        const start = new Cesium.JulianDate();
+        const stop = new Cesium.JulianDate().addDays(100);
         viewer.timeline.zoomTo(start, stop);
 
-        var clock = viewer.clock;
+        const clock = viewer.clock;
         clock.startTime = start;
         clock.stopTime = stop;
         clock.currentTime = start;
@@ -488,161 +700,311 @@
         clock.multiplier = 5;
       });
 
-      if (viewSite) {
+      if (_zoomToSite) {
         viewer.camera.flyTo({
-          destination : Cesium.Cartesian3.fromDegrees(siteInfo.value.marker.lon, siteInfo.value.marker.lat, 1000),
+          destination : Cesium.Cartesian3.fromDegrees(_siteInfo.value.marker.lon, _siteInfo.value.marker.lat, 1000),
         });
+        _zoomToSite = false;
       }
     }
 
-    function postLayer(layerSpec) {
-      var siteID = $("#site_id").val();
-      var jwt = $("#jwt").val();
-      var baseUrl = _baseURLs[$("#env").val()];
-      $.ajax(
-        {
-          url: `${baseUrl}/asbuilt_live/unstable/sites/${siteID}/layer_specs`,
-          type: 'POST',
-          crossDomain: true,
-          headers: {'X-Topcon-Auth': jwt},
-          data: JSON.stringify(layerSpec),
-          success: function(result) {
-            addAsBuiltImages(result.LayerSpecID);
-          }
-        }
-      );
+    function viewAsBuilt() {
+      if (!!_imageryAsBuilt) {
+        viewer.scene.imageryLayers.remove(_imageryAsBuilt);
+      }
+      if (!_siteInfo.value || !_colorMapID) {
+        return;
+      }
+
+      // cutFill will set design layer
+      designPromise = processDesignLayer();
+      layerSpecPromise = processLayerSpec();
+      Promise.all([designPromise, layerSpecPromise]).then((values) => {
+        addAsBuiltImages(values[0].LayerSpecID, values[1].LayerSpecID);
+      });
     }
 
-    function createLayer() {
-      var siteID = $("#site_id").val();
-      var jwt = $("#jwt").val();
-      var baseUrl = _baseURLs[$("#env").val()];
-      var start = [$("#sequences").val()];
-      if (!siteID || !jwt || !start) return;
 
-      var bStart = b64Raw(JSON.stringify(start));
-      var transforms = [{id: 'f_sequence_to_internal', context: null}];
-      var bTransforms = b64Raw(JSON.stringify(transforms));
-
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/_head?start=${bStart}&limit=1&transforms=${bTransforms}`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result){
-            var layerSpec = result.items[0].value;
-            postLayer(layerSpec);
+    function makeSiteInfoPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_site`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result){
+              _siteInfo = result.items[0];
+              $("span#length_abbrev").text(SYSTEM_UNITS.length[_siteInfo.value.units.length.unit].abbreviation);
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
           }
-        }
-      );
+        );
+      });
     }
 
-    function resetSiteData() {
-      siteInfo = {};
-      transform = {};
-      tasks = {};
-      sequencesByTask = {};
-      sequenceTypes = {};
-      colorMaps = {};
-      colorMapID = null;
-      imageryAsBuilt = null;
+    function makeTransformPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        const transformId = b64Raw('transform_gc3');
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/head/${transformId}`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result){
+              _transform = result;
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeSequencesPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        _sequencesByTask = {};
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_sequence_by_task_by_order?limit=100`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              result.items.forEach(function(item) {
+                const sequence = {
+                  id: item.id,
+                  name: item.value.name,
+                  sequenceType: item.value.sequenceType,
+                }
+                if (item.value.task in _sequencesByTask) {
+                  _sequencesByTask[item.value.task].push(sequence)
+                } else {
+                  _sequencesByTask[item.value.task] = [sequence]
+                }
+              });
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeSequenceTypesPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        _sequenceTypes = {};
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_sequenceType_by_class_type_by_name`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              result.items.forEach(function(item) {
+                  _sequenceTypes[item.id] = item.value
+              });
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeColorMapsPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        _colorMaps = {};
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_as_built_color_map_by_type_by_name`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              result.items.forEach(function(item) {
+                  _colorMaps[item.id] = item.value
+              })
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeDesignSetsPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        _designSets = {};
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_designObjectSet_by_name`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              result.items.forEach(function(item) {
+                _designSets[item.id] = item.value;
+              });
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeTasksPromise(baseUrl, siteID, jwt) {
+      return new Promise((resolve, reject) => {
+        $("#tasks").empty();
+        _tasks = {};
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_task_by_name?limit=100`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              result.items.forEach(function(item) {
+                _tasks[item.id] = item.value;
+                $("#tasks").append($('<option>', {
+                  value: item.id,
+                  text: item.value.name,
+                }))
+              });
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeLayerSpecPromise() {
+      const siteID = $("#site_id").val();
+      const jwt = $("#jwt").val();
+      const baseUrl = getSiteApiUrl();
+      const sequence = $("#sequences").val();
+      if (!siteID || !jwt || !sequence) return Promise.reject(new Error('invalid data'));
+
+      const start = [$("#sequences").val()];
+      const bStart = b64Raw(JSON.stringify(start));
+      const transforms = [{id: 'f_sequence_to_internal', context: null}];
+      const bTransforms = b64Raw(JSON.stringify(transforms));
+
+      return new Promise((resolve, reject) => {
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/_head?start=${bStart}&limit=1&transforms=${bTransforms}`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              resolve(result.items[0].value);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makePostLayerSpecPromise(layerSpec) {
+      const siteID = $("#site_id").val();
+      const jwt = $("#jwt").val();
+      const baseUrl = getSiteApiUrl();
+      return new Promise((resolve, reject) => {
+        $.ajax(
+          {
+            url: `${baseUrl}/asbuilt_live/v1/sites/${siteID}/layer_specs`,
+            type: 'POST',
+            crossDomain: true,
+            headers: {'X-Topcon-Auth': jwt},
+            data: JSON.stringify(layerSpec),
+            success: function(result) {
+              resolve(result);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function makeDesignFilePromise() {
+      const siteID = $("#site_id").val();
+      const jwt = $("#jwt").val();
+      const baseUrl = getSiteApiUrl();
+      const designSurface = $("#design_surfaces").val();
+      if (!siteID || !jwt || !designSurface) return Promise.reject(new Error('invalid data'));
+
+      const start = [designSurface];
+      const bStart = b64Raw(JSON.stringify(start));
+
+      return new Promise((resolve, reject) => {
+        $.ajax(
+          {
+            url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/_head?start=${bStart}&limit=1`,
+            headers: {'X-Topcon-Auth': jwt},
+            success: function(result) {
+              resolve(result.items[0].value.doFileUUID);
+            },
+            error: function(error) {
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+
+    function processDesignLayer() {
+      const asbuiltFunc = $("#asbuilt_func").val();
+      if (asbuiltFunc !== 'cutFill') {
+        return Promise.resolve({ LayerSpecID: '' });
+      }
+
+      const designOffset = parseFloat($("#design_offset").val());
+      const lengthUnit = _siteInfo.value.units.length;
+      const convDesignOffset = convertUnitToBase('length', designOffset, lengthUnit)
+      const tileSize = getTileSize(_tileConfig);
+
+      return makeDesignFilePromise().then((designFileUUID) => {
+        const designSpec = makeDesignLayerSpec(designFileUUID, convDesignOffset, tileSize);
+        return makePostLayerSpecPromise(designSpec);
+      }, (error) => Promise.reject(error));
+    }
+
+    function processLayerSpec() {
+      return makeLayerSpecPromise().then((result) => {
+        return makePostLayerSpecPromise(result);
+      }, (error) => Promise.reject(error));
     }
 
     function loadInfo() {
-      var siteID = $("#site_id").val()
-      var jwt = $("#jwt").val()
-      var baseUrl = _baseURLs[$("#env").val()]
-      if (!siteID || !jwt) return
+      const siteID = $("#site_id").val();
+      const jwt = $("#jwt").val();
+      const baseUrl = getSiteApiUrl();
+      if (!siteID || !jwt) {
+        resetSiteData();
+        return;
+      }
 
-      // site info
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_site`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result){
-            siteInfo = result.items[0];
-            console.log(siteInfo);
-          },
-          error: resetSiteData(),
-        }
-      );
-      // transform
-      const transformId = b64Raw('transform_gc3');
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/head/${transformId}`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result){
-            transform = result;
-          }
-        }
-      );
-      // tasks
-      $("#tasks").empty();
-      tasks = {};
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_task_by_name?limit=100`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result){
-            $("#tasks").empty();
-            result.items.forEach(function(item) {
-              tasks[item.value.name] = item.id
-              $("#tasks").append($('<option>', {
-                value: item.id,
-                text: item.value.name,
-              }))
-            })
-          },
-        }
-      );
-      // sequences
-      sequencesByTask = {};
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_sequence_by_task_by_order?limit=100`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result){
-            result.items.forEach(function(item) {
-              var sequence = {
-                id: item.id,
-                name: item.value.name,
-                sequenceType: item.value.sequenceType,
-              }
-              if (item.value.task in sequencesByTask) {
-                sequencesByTask[item.value.task].push(sequence)
-              } else {
-                sequencesByTask[item.value.task] = [sequence]
-              }
-            })
-          }
-        }
-      );
-      // sequence types
-      sequenceTypes = {}
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_sequenceType_by_class_type_by_name`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result) {
-            result.items.forEach(function(item) {
-                sequenceTypes[item.id] = item.value
-            })
-          }
-        }
-      );
-      // color maps
-      colorMaps = {};
-      $.ajax(
-        {
-          url: `${baseUrl}/rdm/v1/site/${siteID}/domain/sitelink/view/v_sl_as_built_color_map_by_type_by_name`,
-          headers: {'X-Topcon-Auth': jwt},
-          success: function(result) {
-            result.items.forEach(function(item) {
-                colorMaps[item.id] = item.value
-            })
-          }
-        }
-      );
+      Promise.all
+      ([
+          makeSiteInfoPromise(baseUrl, siteID, jwt),
+          makeTransformPromise(baseUrl, siteID, jwt),
+          makeSequencesPromise(baseUrl, siteID, jwt),
+          makeSequenceTypesPromise(baseUrl, siteID, jwt),
+          makeColorMapsPromise(baseUrl, siteID, jwt),
+          makeDesignSetsPromise(baseUrl, siteID, jwt),
+          makeTasksPromise(baseUrl, siteID, jwt)
+        ]).then((values) => {
+          $("#tasks").trigger('change');
+          $("#sequences").trigger('change');
+          $("#asbuilt_func").trigger('change');
+        }, () => resetSiteData());
     }
   </script>
  </div>
