@@ -43,7 +43,7 @@ The following tabs exist in the spreadsheet:
 - Trail Data.
 
 ### Config Sheet
-Load the haul report into the spreadsheet.
+Load the haul report into the spreadsheet by clicking the ```Load Haul Report JSON``` button.
 
 ## Details
 
