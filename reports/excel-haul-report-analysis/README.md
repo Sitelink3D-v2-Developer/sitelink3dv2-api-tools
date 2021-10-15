@@ -14,7 +14,7 @@ The following process describes the use of the viewer:
 - Load the report data.
 
 ### Rund and Download a Haul report
-A haul report can be run either via the Sitelink3D v2 web portal or via the API.
+A haul report can be run either via the Sitelink3D v2 web portal or via the API. Download the haul report in JSON format. 
 
 ### Configure the Spreadsheet
 Macro enabled spreadsheet. Click ```Enable Content```
