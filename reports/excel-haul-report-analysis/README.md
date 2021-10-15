@@ -9,6 +9,7 @@ Haul reports contain content that is best visualized. The particular data and th
 ## Usage
 The following process describes the use of the viewer:
 
+- Run and download a haul report.
 - Configure the spreadsheet.
 - Load the report data.
 
