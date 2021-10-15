@@ -29,7 +29,7 @@ The tool requires the following site configuration which is entered into the bro
 
 The selection of cloud environment is detailed [here](https://github.com/Sitelink3D-v2-Developer/sitelink3dv2-examples#select-a-cloud-environment). Obtaining the site identifier for your site is detailed [here](https://github.com/Sitelink3D-v2-Developer/sitelink3dv2-examples#site-identifier) and accessing a JWT for the site is detailed [here](https://github.com/Sitelink3D-v2-Developer/sitelink3dv2-examples#jwt). Once populated, click on the green ```View``` button to load the available metadata from the specified site.
 
-### Navigating the Spreadsheet
+## Navigating the Spreadsheet
 The following tabs exist in the spreadsheet:
 
 - Config.
@@ -41,6 +41,9 @@ The following tabs exist in the spreadsheet:
 - Elevations Calcs.
 - Report Data.
 - Trail Data.
+
+### Config Sheet
+Load the haul report into the spreadsheet.
 
 ## Details
 
