@@ -43,7 +43,10 @@ The following tabs exist in the spreadsheet:
 - Trail Data.
 
 ### Config Sheet
-Load the haul report into the spreadsheet by clicking the ```Load Haul Report JSON``` button.
+Load the haul report into the spreadsheet by clicking the ```Load Haul Report JSON``` button. The spreadsheet will automatically switch to the Report Data tab to display the imported data.
+
+Move back to the Config tab to inspect the materials that the sheet has inspected in your report. You are able to configure two expected values:
+
 
 ## Details
 
