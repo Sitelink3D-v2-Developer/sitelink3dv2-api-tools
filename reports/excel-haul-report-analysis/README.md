@@ -32,7 +32,15 @@ The selection of cloud environment is detailed [here](https://github.com/Sitelin
 ### Navigating the Spreadsheet
 The following tabs exist in the spreadsheet:
 
--
+- Config.
+- Progress.
+- Progress Calcs.
+- Operations.
+- Operations Calcs.
+- Elevations.
+- Elevations Calcs.
+- Report Data.
+- Trail Data.
 
 ## Details
 
