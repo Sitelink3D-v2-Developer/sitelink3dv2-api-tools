@@ -4,7 +4,7 @@ Macro enabled spreadsheet.
 # Excel Haul Report Analyzer
 
 ## Background
-Haul reports contain content that is best visualized. Replace widgets on Sitelink3D v2 web portal.
+Haul reports contain content that is best visualized. The particular data and the way it is radiated vary from site to site. Replace widgets on Sitelink3D v2 web portal.
 
 ## Usage
 The following process describes the use of the viewer:
