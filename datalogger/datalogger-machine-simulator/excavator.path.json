@@ -1,0 +1,21 @@
+[
+    { "point" : [  37.35245163, -95.53001581, 229.08000000], "ns": "topcon.obw", "action": "obw_open", "delay": 10, "delay_name" : "load", "quantity" : -1, "state" : {
+        "topcon.obw" : {
+            "haul" : ""
+        }
+    }},
+    { "point" : [  37.35245163, -95.53001581, 229.08000000], "ns": "topcon.obw", "state": {
+        "topcon.obw" : {
+            "haul" : "urn:X-topcon:machine:ac:truck:oem:nonesuch:model::sn::id:KKR-318"
+        }
+    }},
+    { "point" : [  37.35245160, -95.53001580, 229.08000000], "ns": "topcon.obw", "action": "obw_load", "delay":  7, "delay_name" : "load", "region": "Quarry - Load Fill Dirt"},
+    { "point" : [  37.35245160, -95.53001580, 229.08000000], "ns": "topcon.obw", "action": "obw_lift", "delay":  7, "delay_name" : "lift", "data": {
+        "preset_tare": 0, "weight": 4.1, "start": true }},
+    { "point" : [  37.35245160, -95.53001580, 229.08000000], "ns": "topcon.obw", "action": "obw_lift", "delay":  7, "delay_name" : "lift", "data": {
+        "preset_tare": 0, "weight": 3.8, "start": false }},
+    { "point" : [  37.35245160, -95.53001580, 229.08000000], "ns": "topcon.obw", "action": "obw_lift", "delay":  7, "delay_name" : "lift", "data": {
+        "preset_tare": 0, "weight": 2.2, "start": false }},
+    { "point" : [  37.35245163, -95.53001581, 229.08000000], "ns": "topcon.obw", "action": "obw_clear", "data": {
+        "attach_name":"Bucket","job_name":"Job","job_num":25632,"ticket_num":0,"legal_trade":true}, "delay" : 30, "delay_name" : "idle"}
+]
