@@ -1,0 +1,87 @@
+[
+    {
+        "point": [
+            37.33705219,
+            -95.51040453,
+            241.89
+        ],
+        "action": "load",
+        "delay": 20,
+        "speed": 3,
+        "material": "Broken Concrete",
+        "region": "Airport - Load Broken Concrete",
+        "data" : {
+            "loader_id" : "urn:X-topcon:machine:ac:excavator:oem:CAT:model:KITTEN:sn::id:James%E2%80%99s%20Excavator"
+        },
+        "state" : {
+            "topcon.task" : {
+                "id" : "TASK-1",
+                "surface_id" : "SURF-1",
+                "alignment_id" : "ALIGN-1",
+                "sequence_id" : "SEQ-1",
+                "name" : "Task 1: Broken Concrete",
+                "sequence_name" : "Sequence 1",
+                "surface_name": "Surface 1"
+            }
+        }
+    },
+    {"point":[37.33707952,-95.51057269,241.82],"action":""},
+    {"point":[37.33730927,-95.51058097,242.14],"action":""},
+    {"point":[37.33800111,-95.51028138,243.29],"action":""},
+    {"point":[37.33816254,-95.51010284,243.5],"action":""},
+    {"point":[37.33824517,-95.50950541,243.39],"action":"","speed":6},
+    {"point":[37.33828597,-95.50907359,243.73],"action":""},
+    {"point":[37.33833877,-95.50882052,243.81],"action":""},
+    {"point":[37.33844585,-95.50865721,243.56],"action":""},
+    {"point":[37.33861467,-95.50860916,243.77],"action":""},
+    {"point":[37.33962823,-95.50862621,246.12],"delay_name":"lights","delay":10,"speed":6},
+    {"point":[37.33969803,-95.50874216,246.17],"action":"","speed":12},
+    {"point":[37.33961779,-95.52043084,242.02],"action":""},
+    {"point":[37.33957363,-95.5321008,236.34],"action":"","speed":6},
+    {"point":[37.33946012,-95.53222908,236.22],"action":"","speed":12},
+    {"point":[37.33661331,-95.53220243,237.69],"action":""},
+    {"point":[37.33376789,-95.53219923,239.1],"action":""},
+    {"point":[37.33367513,-95.53237044,239.09],"action":"","speed":3},
+    {"point":[37.33371614,-95.532686,239.62],"action":""},
+    {"point":[37.33368276,-95.53316077,239.45],"action":""},
+    {"point":[37.3344417,-95.5337481,239.55],"action":""},
+    {"point":[37.33489879,-95.53370329,239.16],"action":""},
+    {"point":[37.33500082,-95.53389237,239.18],"action":"dump","delay":10,"region":"Stockpile - Dump"},
+    {"point":[37.3346824,-95.53445884,239.42],"action":""},
+    {"point":[37.33449058,-95.5345216,239.07],"action":""},
+    {"point":[37.33435513,-95.53437839,239.27],"action":""},
+    {"point":[37.33423998,-95.53434206,239.51],"action":""},
+    {"point":[37.33355418,-95.53473258,239.31],"action":"close"},
+    {"point":[37.33338804,-95.53475596,239.16],"action":"load","delay":20,"region":"Stockpile - Load 3/4 Ag Base","material":"3/4 Aggregate Base",
+        "state" : {
+            "topcon.task" : {
+                "id" : "TASK-1",
+                "surface_id" : "SURF-2",
+                "alignment_id" : "ALIGN-2",
+                "sequence_id" : "SEQ-2",
+                "name" : "Task 2: Load Aggregate",
+                "sequence_name" : "Sequence 2",
+                "surface_name": "Surface 2"
+            }
+        }
+    },
+    {"point":[37.33304103,-95.53445001,243.4],"action":""},
+    {"point":[37.33300041,-95.5343425,242],"action":""},
+    {"point":[37.33351935,-95.53329588,239.5],"action":""},
+    {"point":[37.33366064,-95.53210369,239.33],"action":"","speed":12},
+    {"point":[37.33659315,-95.53210907,237.38],"action":""},
+    {"point":[37.3395204,-95.53214231,236.46],"action":"","speed":6},
+    {"point":[37.33954033,-95.5320633,236.26],"action":"","speed":12},
+    {"point":[37.33956836,-95.52037362,241.98],"action":""},
+    {"point":[37.33964374,-95.50869223,246.11],"action":"","speed":6},
+    {"point":[37.33858724,-95.50866596,243.95],"action":""},
+    {"point":[37.33846649,-95.50870474,243.71],"action":""},
+    {"point":[37.3383876,-95.50881355,243.95],"action":""},
+    {"point":[37.33832315,-95.50908945,243.72],"action":""},
+    {"point":[37.3382082,-95.50954315,243.35],"action":""},
+    {"point":[37.33812749,-95.50959699,243.3],"action":""},
+    {"point":[37.33793273,-95.50957472,243.2],"action":"","speed":3},
+    {"point":[37.33770385,-95.50969354,243.14],"action":"dump","delay":10,"region":"Airport - Dump 3/4 Ag Base"},
+    {"point":[37.33732412,-95.51021571,242.39],"action":""},
+    {"point":[37.33711396,-95.51021667,242.1],"action":"close"}
+]

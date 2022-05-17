@@ -1,0 +1,19 @@
+{
+    "grain": 2.0,
+    "interval": 30,
+    "machines" : [
+        {
+            "machine" : "urn:X-topcon:machine:ac:excavator:oem:CAT:model:KITTEN:sn::id:Bob%E2%80%99s%20Excavator",
+            "device"  : "urn:X-topcon:device:ac:HMI:oem:RDS:model:ISOCAN2:sn:4600e334:id:4600e334",
+            "operator" : "92a5d225-2b09-472b-aaeb-a6fc50724f83",
+            "quantity" : -1,
+            "delay_seconds" : 180.2
+        }
+    ],
+    "num_hauls": 10000,
+    "path_file": "excavator.path.json",
+    "fixture_files" : ["state.jsonl", "excavator.jsonl"],
+    "ready_already": true,
+    "speed": 150,
+    "speed_factor": 10
+}

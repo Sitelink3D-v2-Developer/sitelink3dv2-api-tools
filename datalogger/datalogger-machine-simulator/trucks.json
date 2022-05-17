@@ -1,0 +1,36 @@
+{
+    "grain": 2.0,
+    "interval": 30,
+    "machines" : [
+        {
+            "machine" : "urn:X-topcon:machine:ac:truck:oem:nonesuch:model::sn::id:James%E2%80%99s%20Hole%20Maker",
+            "device"  : "urn:X-topcon:device:ac:Phone:oem:Apple:model:x86_64:sn::id:KKR-318",
+            "operator" : "e5ba2644-1f46-4f9b-b52a-5d7529742561",
+            "delay_seconds" : 11
+        },
+        {
+            "machine" : "urn:X-topcon:machine:ac:truck:oem:nonesuch:model::sn::id:LTI-664",
+            "device"  : "urn:X-topcon:device:ac:Phone:oem:Apple:model:x86_64:sn::id:LTI-664",
+            "operator" : "02e8485d-2c31-4cbd-877b-ae7cf2424fed",
+            "delay_seconds" : 8
+        },
+        {
+            "machine" : "urn:X-topcon:machine:ac:truck:oem:nonesuch:model::sn::id:ZXA-990",
+            "device"  : "urn:X-topcon:device:ac:Phone:oem:Apple:model:x86_64:sn::id:ZXA-990",
+            "operator" : "c75ab209-46fc-4530-8df7-3e56c4ad401c",
+            "delay_seconds" : 5
+        },
+        {
+            "machine" : "urn:X-topcon:machine:ac:truck:oem:nonesuch:model::sn::id:ASX-038",
+            "device"  : "urn:X-topcon:device:ac:Phone:oem:Apple:model:x86_64:sn::id:ASX-038",
+            "operator" : "c9022227-aff7-4d4e-b63e-d03d6aebe497",
+            "delay_seconds" : 0
+        }
+    ],
+    "num_hauls": 10000,
+    "path_file": "trucks.path.json",
+    "fixture_files" : ["state.jsonl"],
+    "ready_already": true,
+    "speed": 150,
+    "speed_factor": 10
+}
