@@ -12,7 +12,7 @@ default_files="${SCRIPT_DIR}/trucks.json ${SCRIPT_DIR}/excavator.json"
 ## <<< Mandatory Settings
 
 declare -A HOSTS
-HOSTS=([qa]="qa-api.code.topcon.com" [prod]="api.code.topcon.com")
+HOSTS=([qa]="qa-api.sitelink.topcon.com" [prod]="api.sitelink.topcon.com")
 logname=${SCRIPT_NAME}
 logpath=${SCRIPT_DIR}/logs
 # >> option processing
