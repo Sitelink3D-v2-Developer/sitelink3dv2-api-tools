@@ -5,10 +5,68 @@ import logging
 import requests
 import time
 import uuid
+import hashlib
 from framework import *
+from tqdm import tqdm
+from requests_toolbelt import MultipartEncoder
+import math
 
-logger = logging.getLogger("site-tool")
-AUTH_HEADER_KEY = "X-Topcon-Auth"
+logger = logging.getLogger(__name__)
+
+SITELINK_MAX_FILE_PART_SIZE = 10485760
+
+# Yield parts of data from file pointer until EOF. This avoids reading large files completely into memory.
+# This function is used to chunk the data if its size exceeds the maximum part size accpeted by the 
+# Sitelink3D v2 file and designfile services
+def read_parts(a_file_ptr, a_part_size=SITELINK_MAX_FILE_PART_SIZE):
+    while True:
+        part = a_file_ptr.read(a_part_size)
+        if not part:
+            break
+        yield part 
+
+def upload_file_multipart(a_url, a_upload_uuid, a_file_location, a_file_name, a_media_type, a_encoding_type, a_jwt):
+    file_path = a_file_location + os.path.sep + a_file_name
+    part_index = 0
+    part_generator = read_parts(a_file_ptr=open(file_path, "rb"), a_part_size=SITELINK_MAX_FILE_PART_SIZE)
+
+    sha1 = hashlib.sha1()
+    with open(file_path, "rb") as f:
+        sha1.update(f.read())
+
+    success = True
+
+    for part in part_generator:
+        file_size = os.stat(file_path).st_size
+        part_total_count = math.ceil(file_size / SITELINK_MAX_FILE_PART_SIZE)
+
+        print("Preparing data part index {} of size {} bytes. Total parts {} ".format(part_index, len(part), part_total_count))
+
+        form_header = {
+            "upload-uuid": str(a_upload_uuid),
+            "upload-file-name": a_file_name,
+            "upload-file-sha1": sha1.hexdigest(),
+            "upload-file-size": str(file_size),
+            "upload-part-index": str(part_index),
+            "upload-total-parts": str(part_total_count),
+            "upload-part-size": str(len(part)),
+            "upload-file" : (a_file_name, part, "application/octet-stream")
+        }
+
+        multipartEncoder = MultipartEncoder(fields=form_header)
+        headers = {
+            "Content-Type": "multipart/form-data; media-type=\"%s\"; boundary=%s" % (a_media_type, multipartEncoder.boundary_value),
+            "Authorization": "Bearer " + a_jwt,
+            "Content-Encoding": a_encoding_type
+        }
+        response = requests.post(a_url, headers=headers, data=multipartEncoder)
+        print_and_assert_http_reponse(a_response=response, a_print_text_on_success=True, a_optional_text="File part upload")
+        if response.status_code != 200:
+            success = False
+            break
+        part_index = part_index + 1
+
+    return success
 
 class RdmItf(object):
     """ bare-bones RDM access """
@@ -42,13 +100,13 @@ class RdmItf(object):
 
         url = "%s/rdm_log/v1/site/%s/domain/%s/events" % (self.api_url, site_identifier, domain)
         data = json.dumps({ "data_b64" : base64.b64encode(json.dumps(obj).encode("utf-8")).decode("utf-8") })
-        headers = {'content-type':'application/json', ApiAccess.AUTH_HEADER_KEY : token}
+        headers = {'content-type':'application/json', "X-Topcon-Auth" : token}
         res = requests.post(url, data, headers=headers, verify=self.verify)
-        res.raise_for_status()
+        print_and_assert_http_reponse(a_response=res, a_print_text_on_success=True, a_optional_text="Post object")
 
     def get_stats(self, token, site_identifier, domain):
         url = "%s/rdm/v1/site/%s/domain/%s/stats" % (self.api_url, site_identifier, domain)
-        headers = {'content-type':'application/json', ApiAccess.AUTH_HEADER_KEY : token}
+        headers = {'content-type':'application/json', "X-Topcon-Auth" : token}
         res = requests.get(url, verify=self.verify, headers = headers)
         while res.status_code == 503:
             time.sleep(1)
@@ -61,7 +119,7 @@ class RdmItf(object):
         if start and not isinstance(start, str):
             start = self.safe_b64(json.dumps(start))
         url = "%s/rdm/v1/site/%s/domain/%s/view/%s?limit=%d&start=%s&end=%s" % (self.api_url, site_identifier, domain, view, limit, start, end)
-        headers = {'content-type':'application/json', ApiAccess.AUTH_HEADER_KEY : token}
+        headers = {'content-type':'application/json', "X-Topcon-Auth" : token}
         res = requests.get(url, verify=self.verify, headers = headers)
         while res.status_code == 503:
             time.sleep(1)
@@ -79,7 +137,7 @@ class RdmAccessor(object):
         self.site = site
         self.domain = domain or "sitelink"
         self.token = token
-        self.headers = {'content-type':'application/json', AUTH_HEADER_KEY : token}
+        self.headers = {'content-type':'application/json', "X-Topcon-Auth" : token}
 
     def safe_b64(self, x): return self.itf.safe_b64(x)
 
@@ -120,6 +178,11 @@ class RdmAccessor(object):
         if items[0]["key"] != key: return None
         return items[0]
 
+def post_rdm_payload(a_payload, a_rdm_accessor):
+    a_payload["_at"] = int(round(time.time() * 1000))
+    print("Posting payload to RDM {}".format(json.dumps(a_payload,indent=4)))
+    a_rdm_accessor.post_object(a_payload) 
+
 if __name__ == "__main__":
     # -- >> Available verbs ----------------------------------------------------
     def stats_action():
@@ -159,7 +222,6 @@ if __name__ == "__main__":
                 print("FileNotFoundError")
                 pass
 
-
     def view_action(view_name):
         """ Fetch the entries in the given view """
         lines = rdm_accessor.fetch_view_all(view_name)
@@ -194,62 +256,218 @@ if __name__ == "__main__":
                 break
         print(json_dumps(history))
 
-    def copyto_action(url, site, token):
-        """ Copy this RDM's heads into a new site. Use a blank 'url' to copy to the same server."""
-        if not url: url = RDM_URL
-        rdm_to = RdmAccessor(RdmItf(api_url=url, verify=not args.unverified), site=site, domain=args.domain, token=token)
-        heads = rdm_accessor.fetch_view_all("_head")
-        head2 = rdm_to.fetch_view_all("_head")
-        id2rev = {}
-        for h2 in head2:
-            v = h2["value"]
-            id2rev[v["_id"]] = v["_rev"]
+    def configure_log_projection(a_dest_url, a_verify, a_site, a_domain, a_dest_token):
+        print("Projecting RDM '{}' domain log".format(a_domain))
+        dest_rdm_accessor = RdmAccessor(RdmItf(api_url=a_dest_url, verify=a_verify), site=a_site, domain=a_domain, token=a_dest_token)
+        
+        source_rdm_log_projection_url = "{}/rdm_log/v1/site/{}/domain/{}/events".format(args.url, args.site, a_domain)
+        params = {"timeout_ms": 0, "from_cursor_excl":0, "limit":400, "timeout_ms":0 }
+        source_headers = {'content-type':'application/json', "X-Topcon-Auth" : args.token} 
 
-        count, ignored, copied, errors, skipped = 0, 0, 0, 0, 0
-        logger.info("copying %d entries", len(heads))
-        total, totallen = len(heads), len(str(len(heads)))
-        for head in heads:
-            count += 1
-            slug = "%*d of %*d" % (totallen, count, totallen, total)
-            v = head["value"]
-            t = v.get("_type", "_")
-            if v.get("_archived") == True:
-                print("%s: Ignored archived %s object %s" % (slug, t, v["_id"]))
-                ignored += 1
-            elif t.startswith("_"):
-                ignored +=1
-            elif t == "sl::list":
-                print("%s: Ignored list %s object %s" % (slug, t, v["_id"]))
-                ignored += 1
-            elif t == "sl::file":
-                print("%s: Ignored file %s object %s. This tool does not copy files." % (slug, t, v["_id"]))
-                ignored += 1
-            elif t == "sl::task":
-                print("%s: Ignored task %s object %s. Tasks cannot be copied because referenced design sets are not copied." % (slug, t, v["_id"]))
-                ignored += 1
-            elif t == "sl::designObjectSet":
-                print("%s: Ignored design set %s object %s. Design sets cannot be copied because referenced design objects are not copied." % (slug, t, v["_id"]))
-                ignored += 1
-            elif t == "sl::designObject":
-                print("%s: Ignored design object %s object %s. This tool does not copy design objects." % (slug, t, v["_id"]))
-                ignored += 1
-            elif id2rev.get(v["_id"], "") == v["_rev"]:
-                print("%s: skip %s object %s" % (slug, t, v["_id"]))
-                skipped += 1
+        return dest_rdm_accessor, source_rdm_log_projection_url, params, source_headers
+
+    def event_callback_filesystem(a_event, a_source_headers, a_dest_url, a_dest_site, a_dest_token, a_dest_rdm_accessor, a_status_dict):
+        slug, decoded_event, object_type = process_log_event(a_event=a_event, a_status_dict=a_status_dict)
+
+        if object_type.startswith("_"):
+            ignore_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_status_dict=a_status_dict, a_additional_text="internal RDM type")
+
+        elif object_type == "fs::file":
+            # Download the file. Don't ignore archived files as they may be the origin of design file content.
+            get_file_url = "{}/file/v1/sites/{}/files/{}/url".format(args.url, args.site, decoded_event["uuid"])
+            res = requests.get(get_file_url, verify=not args.unverified, headers=a_source_headers)
+            while res.status_code == 503:
+                time.sleep(1)
+                res = requests.get(get_file_url, verify=not args.unverified, headers=a_source_headers)
+            print_and_assert_http_reponse(a_response=res, a_print_text_on_success=True, a_optional_text="Get file location")
+            # get the content of the url
+            output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), args.site)
+            print("{}: Processing file from {}".format(slug, get_file_url))
+            download_file(a_source_url="{0}{1}".format(args.url, res.text), a_source_headers=a_source_headers, a_output_file_name=decoded_event["name"], a_output_dir=output_dir, a_source_site=args.site)
+
+            # Now upload the file under the same parent (if specified) at the dest site.
+            url = "{}/file/v1/sites/{}/upload".format(a_dest_url, a_dest_site)
+            upload_success = upload_file_multipart(a_url=url, a_upload_uuid=decoded_event["uuid"], a_file_location=output_dir, a_file_name=decoded_event["name"], a_media_type="multipart/mixed", a_encoding_type="binary", a_jwt=a_dest_token)
+
+            if upload_success:
+                copy_object_type(a_slug=slug, a_object_type=object_type, a_object_id="uuid={}".format(decoded_event["uuid"]), a_decoded_event=decoded_event, a_rdm_accessor=a_dest_rdm_accessor, a_status_dict=a_status_dict)
             else:
-                try:
-                    rdm_to.post_object(v)
-                    copied += 1
-                    print("%s: Copied %s object %s" % (slug, t, v["_id"]))
-                except requests.exceptions.HTTPError as e:
-                    if e.response.status_code >= 400: raise
-                    print("%s: Failed %s object %s: error: %s" % (slug, t, v["_id"], e.response.content))
-                    errors += 1
+                a_status_dict["errors"] += 1
+                print("Upload failed.")
 
-        print("%d entries: %d head(s) copied, %d ignored, %d skipped, %d errors" % (total, copied, ignored, skipped, errors))
+        elif object_type == "fs::folder":
+            copy_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_decoded_event=decoded_event, a_rdm_accessor=a_dest_rdm_accessor, a_status_dict=a_status_dict)
+
+    def event_callback_sitelink(a_event, a_source_headers, a_dest_url, a_dest_site, a_dest_token, a_dest_rdm_accessor, a_status_dict):
+
+        particular_dict = {
+            "Lines" : "LN3",
+            "Points" : "PT3",
+            "Surfaces" : "TN3",
+            "Roads" : "RD3",
+            "Planes" : "PL3"
+        }
+
+        media_type_dict = {
+            "Lines" : "application/vnd.topcon.ln3",
+            "Points" : "application/vnd.topcon.pt3",
+            "Surfaces" : "application/vnd.topcon.tn3",
+            "Roads" : "application/vnd.topcon.rd3",
+            "Planes" : "application/vnd.topcon.pl3"
+        }
+
+        slug, decoded_event, object_type = process_log_event(a_event=a_event, a_status_dict=a_status_dict)
+
+        if object_type.startswith("_"):
+            ignored = ignore_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_status_dict=a_status_dict, a_additional_text="internal RDM type")
+
+        elif object_type == "sl::list":
+            ignored = ignore_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_status_dict=a_status_dict, a_additional_text="lists are special purpose objects")
+
+        elif object_type == "sl::site":
+            ignored = ignore_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_status_dict=a_status_dict, a_additional_text="the source site definition is not copied to the destination site")
+
+        elif object_type == "sl::working_set":
+            ignored = ignore_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_status_dict=a_status_dict, a_additional_text="working sets are obsolete")
+
+        elif object_type == "sl::designObjectSet":
+
+            # Design Object Sets look something like the following.
+            # {
+            #     "_id": "04585119-e2c2-4ed2-b336-5a30ca90c95f",
+            #     "_type": "sl::designObjectSet",
+            #     "name": "Default Design Set",
+            #     "designObjects": [],
+            #     "_rev": "d61cd5ec-54b2-4951-bfb6-3925028dacb6",
+            #     "_at": 1662430394645
+            # }
+            
+            # We have special handling that ignores Design Object Sets with a particular _id UUID. 
+            # The Sitelink3D v2 website creates a default design set when a site is created. This 
+            # assists with usability for web users and results in an RDM object that we don't want
+            # to replicate at the destination site. Exclude it here based on the known UUID:
+            if decoded_event["_id"] == "04585119-e2c2-4ed2-b336-5a30ca90c95f": # default_design_object_set
+                return
+
+            copy_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_decoded_event=decoded_event, a_rdm_accessor=a_dest_rdm_accessor, a_status_dict=a_status_dict)
+
+        elif object_type == "sl::designObject" or object_type == "sl::deviceDesignObject":
+
+            # Each design object is actually stored as a MAXML file that we must now download and upload at the destination site. We do this via the design_file service.
+            get_file_url = "{}/designfile/v1/sites/{}/design_files/{}?design_type={}&particular={}".format(args.url, args.site, decoded_event["doFileUUID"], decoded_event["designType"], particular_dict[decoded_event["designType"]])
+            output_name = "{}.{}".format(decoded_event["name"],particular_dict[decoded_event["designType"]])
+            output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), args.site)
+            print("{}: Processing design file from {}".format(slug, get_file_url))
+            download_file(a_source_url=get_file_url, a_source_headers=a_source_headers, a_output_file_name=output_name, a_output_dir=output_dir, a_source_site=args.site)
+
+            # Now upload that MAXML to the destination site.
+            upload_uuid = decoded_event["doFileUUID"]
+            design_file_uuid = decoded_event["doFileUUID"]
+            media_type = media_type_dict[decoded_event["designType"]]
+
+            url = "{}/designfile/v1/sites/{}/design_files/{}/fineupload".format(a_dest_url, a_dest_site, design_file_uuid)
+            upload_success = upload_file_multipart(a_url=url, a_upload_uuid=design_file_uuid, a_file_location=output_dir, a_file_name=output_name, a_media_type=media_type, a_encoding_type="identity", a_jwt=a_dest_token)
+            
+            if upload_success:
+                # Ensure that the RDM payload contains a "createdAt" field.
+                if not "createdAt" in decoded_event:
+                    decoded_event["createdAt"] = decoded_event["_at"]
+                copy_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_decoded_event=decoded_event, a_rdm_accessor=a_dest_rdm_accessor, a_status_dict=a_status_dict)
+            else:
+                a_status_dict["errors"] += 1
+                print("Upload failed.")
+
+        else:
+            copy_object_type(a_slug=slug, a_object_type=object_type, a_object_id="_id={}".format(decoded_event["_id"]), a_decoded_event=decoded_event, a_rdm_accessor=a_dest_rdm_accessor, a_status_dict=a_status_dict)
+            
+
+    def process_rdm_domain_events(a_event_callback, a_dest_url, a_verify, a_dest_site, a_domain, a_dest_token, a_status_dict):
+        dest_rdm_accessor, source_rdm_log_projection_url, params, source_headers = configure_log_projection(a_dest_url=a_dest_url, a_verify=a_verify, a_site=a_dest_site, a_domain=a_domain, a_dest_token=a_dest_token)
+
+        more_data = True
+        while more_data:
+            
+            response = requests.get(source_rdm_log_projection_url, verify=a_verify, headers=source_headers, params=params)
+            print_and_assert_http_reponse(a_response=response, a_print_text_on_success=False, a_optional_text="Fetch event page")
+            
+            if response.status_code == 200:
+                res_json = response.json()
+                params["from_cursor_excl"] = res_json["cursor_incl"]
+                for event in res_json["events"]:
+                    a_event_callback(a_event=event, a_source_headers=source_headers, a_dest_url=a_dest_url, a_dest_site=a_dest_site, a_dest_token=a_dest_token, a_dest_rdm_accessor=dest_rdm_accessor, a_status_dict=a_status_dict)
+
+            elif response.status_code == 204: # No data returned meaning the query has finalised. Treat this as distinct from an error.
+                print("Query finished.")
+                more_data = False
+            else:
+                print("An error occurred.")
+                more_data = False
+
+    def process_log_event(a_event, a_status_dict):
+        a_status_dict["count"] += 1
+        slug = "{}: log_id {}, seq {}".format(a_status_dict["count"], a_event["log_id"], a_event["seq"])
+        decoded_event = json.loads(base64.b64decode(a_event["data_b64"]).decode('utf-8'))
+        object_type = decoded_event.get("_type", "_")
+
+        return slug, decoded_event, object_type
+
+    def ignore_object_type(a_slug, a_object_type, a_object_id, a_status_dict, a_additional_text=""):
+        log_string = "%s: Ignore %s object [%s]" % (a_slug, a_object_type, a_object_id)
+        if len(a_additional_text) > 0:
+            log_string += " ({})".format(a_additional_text)
+        print(log_string)
+        a_status_dict["ignored"] +=1
+
+    def copy_object_type(a_slug, a_object_type, a_object_id, a_decoded_event, a_rdm_accessor, a_status_dict):
+        try:
+            print("%s: Copy %s object [%s]" % (a_slug, a_object_type, a_object_id))
+            post_rdm_payload(a_payload=a_decoded_event, a_rdm_accessor=a_rdm_accessor)
+            a_status_dict["copied"] += 1
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code >= 400: raise
+            print("%s: Failed to copy %s object [%s]: error: %s" % (a_slug, a_object_type, a_object_id, e.response.content))
+            a_status_dict["errors"] += 1
+
+    def download_file(a_source_url, a_source_headers, a_output_file_name, a_output_dir, a_source_site):                        
+        response = requests.get(a_source_url, headers=a_source_headers, stream=True)
+        print_and_assert_http_reponse(a_response=response, a_print_text_on_success=False, a_optional_text="Get file")
+
+        if not os.path.exists(a_output_dir):
+            os.mkdir(a_output_dir)
+
+        output_file_qualified_name = os.path.join(a_output_dir, a_output_file_name)
+        with open(output_file_qualified_name, "wb") as handle:
+            for data in tqdm(response.iter_content()):
+                handle.write(data)
+        return output_file_qualified_name
+
+    def print_and_assert_http_reponse(a_response, a_print_text_on_success=True, a_optional_text=""):
+        log_string = ""
+        if len(a_optional_text) > 0:
+            log_string += "{} ".format(a_optional_text)
+        log_string += "response {}".format(a_response.status_code)
+        if a_response.status_code != 200 or a_print_text_on_success:
+            # we don't print success texts in some instances due to size
+            log_string += ":{}".format(a_response.text)
+
+        print(log_string)
+        a_response.raise_for_status()
+
+    def copy_action(a_dest_url, a_dest_site, a_dest_token):
+        """ Use log projection to duplicate this RDM's log into a new site."""
+
+        status_dict = {"count" : 0, "ignored" : 0, "copied" : 0, "errors" : 0, "skipped" : 0 }
+
+        process_rdm_domain_events(a_event_callback=event_callback_filesystem, a_dest_url=a_dest_url, a_verify=not args.unverified, a_dest_site=a_dest_site, a_domain="file_system", a_dest_token=a_dest_token, a_status_dict=status_dict)
+        
+        process_rdm_domain_events(a_event_callback=event_callback_sitelink, a_dest_url=a_dest_url, a_verify=not args.unverified, a_dest_site=a_dest_site, a_domain="sitelink", a_dest_token=a_dest_token, a_status_dict=status_dict)
+        
+        print("entries: %d objects(s) copied, %d ignored, %d skipped, %d errors." % (status_dict["copied"], status_dict["ignored"], status_dict["skipped"], status_dict["errors"]))
+
 
     actions = {
-        "copyto"  : copyto_action,
+        "copy"    : copy_action,
         "get"     : get_action,
         "stats"   : stats_action,
         "view"    : view_action,
@@ -273,7 +491,7 @@ if __name__ == "__main__":
     # -- << Argument parsing ---------------------------------------------------
 
     # -- >> Set up logging -----------------------------------------------------
-    logging.basicConfig(format=args.log_fmt, level=args.log_lvl)
+    logging.basicConfig(format=args.log_fmt, level=logging.INFO)
     logger = logging.getLogger(__name__)
     # -- << Set up logging -----------------------------------------------------
 
