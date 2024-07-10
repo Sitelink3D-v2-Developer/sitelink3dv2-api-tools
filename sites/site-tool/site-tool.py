@@ -283,11 +283,12 @@ if __name__ == "__main__":
             # get the content of the url
             output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), args.site)
             print("{}: Processing file from {}".format(slug, get_file_url))
-            download_file(a_source_url="{0}{1}".format(args.url, res.text), a_source_headers=a_source_headers, a_output_file_name=decoded_event["name"], a_output_dir=output_dir, a_source_site=args.site)
+            download_file(a_source_url="{0}{1}".format(args.url, res.text), a_source_headers=a_source_headers, a_output_file_name=decoded_event["uuid"], a_output_dir=output_dir, a_source_site=args.site)
 
             # Now upload the file under the same parent (if specified) at the dest site.
             url = "{}/file/v1/sites/{}/upload".format(a_dest_url, a_dest_site)
-            upload_success = upload_file_multipart(a_url=url, a_upload_uuid=decoded_event["uuid"], a_file_location=output_dir, a_file_name=decoded_event["name"], a_media_type="multipart/mixed", a_encoding_type="binary", a_jwt=a_dest_token)
+            media_type="multipart/mixed"
+            upload_success = upload_file_multipart(a_url=url, a_upload_uuid=decoded_event["uuid"], a_file_location=output_dir, a_file_name=decoded_event["uuid"], a_media_type=media_type, a_encoding_type="binary", a_jwt=a_dest_token)
 
             if upload_success:
                 copy_object_type(a_slug=slug, a_object_type=object_type, a_object_id="uuid={}".format(decoded_event["uuid"]), a_decoded_event=decoded_event, a_rdm_accessor=a_dest_rdm_accessor, a_status_dict=a_status_dict)
@@ -358,7 +359,7 @@ if __name__ == "__main__":
             output_name = "{}.{}".format(decoded_event["name"],particular_dict[decoded_event["designType"]])
             output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), args.site)
             print("{}: Processing design file from {}".format(slug, get_file_url))
-            download_file(a_source_url=get_file_url, a_source_headers=a_source_headers, a_output_file_name=output_name, a_output_dir=output_dir, a_source_site=args.site)
+            download_file(a_source_url=get_file_url, a_source_headers=a_source_headers, a_output_file_name=decoded_event["doFileUUID"], a_output_dir=output_dir, a_source_site=args.site)
 
             # Now upload that MAXML to the destination site.
             upload_uuid = decoded_event["doFileUUID"]
@@ -366,7 +367,7 @@ if __name__ == "__main__":
             media_type = media_type_dict[decoded_event["designType"]]
 
             url = "{}/designfile/v1/sites/{}/design_files/{}/fineupload".format(a_dest_url, a_dest_site, design_file_uuid)
-            upload_success = upload_file_multipart(a_url=url, a_upload_uuid=design_file_uuid, a_file_location=output_dir, a_file_name=output_name, a_media_type=media_type, a_encoding_type="identity", a_jwt=a_dest_token)
+            upload_success = upload_file_multipart(a_url=url, a_upload_uuid=design_file_uuid, a_file_location=output_dir, a_file_name=decoded_event["doFileUUID"], a_media_type=media_type, a_encoding_type="identity", a_jwt=a_dest_token)
             
             if upload_success:
                 # Ensure that the RDM payload contains a "createdAt" field.
